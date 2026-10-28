@@ -13,7 +13,7 @@
 - [x] 04 检测结果统计与可视化
 - [x] 05 SAM 图像分割
 - [x] 06 视觉大模型调用
-- [ ] 07 双方案对比界面与实验
+- [x] 07 双方案对比界面与实验
 - [ ] 08 文档、运行视频与最终验收
 
 ## 目录
@@ -31,7 +31,7 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-YOLO、MobileSAM 和本地 Qwen3-VL 均已验证。下一步制作双方案对比界面与实验总结。
+YOLO、MobileSAM、本地 Qwen3-VL 和双方案对比界面均已验证。下一步整理最终文档和运行视频。
 
 ## OpenCV 基础练习
 
@@ -85,6 +85,17 @@ python src/vlm_inventory.py data/input/desk.jpg
 
 程序只连接本机的 `127.0.0.1:11434`，并将结构化物品清单保存到
 `data/output/vlm_inventory.json`。
+
+## 启动演示界面
+
+确保 Ollama 正在运行，然后执行：
+
+```powershell
+streamlit run app.py
+```
+
+浏览器会打开本地地址 `http://127.0.0.1:8501`。选择图片后点击“运行两种方案”，
+即可并排查看 YOLO、MobileSAM 和 Qwen3-VL 的结果。
 
 ## 隐私约定
 
