@@ -8,7 +8,7 @@
 ## 项目进度
 
 - [x] 01 建立项目和 Git 仓库
-- [ ] 02 OpenCV 读取与展示图片
+- [x] 02 OpenCV 读取与展示图片
 - [ ] 03 YOLO 目标检测
 - [ ] 04 检测结果统计与可视化
 - [ ] 05 SAM 图像分割
@@ -31,4 +31,21 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-正在进行环境准备。后续每完成一个可运行的小功能，就进行一次有意义的 Git 提交。
+OpenCV 图片处理已经通过真实照片验证。下一步使用 YOLO 完成目标检测。
+
+## OpenCV 基础练习
+
+安装依赖：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+将一张桌面照片放入 `data/input/desk.jpg`，然后运行：
+
+```powershell
+python src/image_basics.py data/input/desk.jpg
+```
+
+程序会在 `data/output/opencv_result.jpg` 生成缩放和标注后的图片。

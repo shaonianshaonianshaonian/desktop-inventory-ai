@@ -13,6 +13,8 @@ Thumbs.db
 .env
 
 # Generated files and model weights
+data/input/*
+!data/input/.gitkeep
 data/output/*
 !data/output/.gitkeep
 *.pt
