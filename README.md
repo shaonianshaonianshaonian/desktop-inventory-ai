@@ -10,7 +10,7 @@
 - [x] 01 建立项目和 Git 仓库
 - [x] 02 OpenCV 读取与展示图片
 - [x] 03 YOLO 目标检测
-- [ ] 04 检测结果统计与可视化
+- [x] 04 检测结果统计与可视化
 - [ ] 05 SAM 图像分割
 - [ ] 06 视觉大模型调用
 - [ ] 07 双方案对比界面与实验
@@ -60,6 +60,9 @@ python src/yolo_detect.py data/input/desk.jpg
 
 首次运行会自动下载轻量预训练模型 `yolo26n.pt`，检测结果保存到
 `data/output/yolo_result.jpg`。
+
+程序还会生成 `data/output/yolo_detections.json`，其中包含类别、置信度、
+边界框和类别数量，供后续与视觉大模型结果比较。
 
 ## 隐私约定
 

@@ -11,6 +11,7 @@ Thumbs.db
 
 # Secrets
 .env
+.ultralytics/
 
 # Generated files and model weights
 data/input/*
