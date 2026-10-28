@@ -12,7 +12,7 @@
 - [x] 03 YOLO 目标检测
 - [x] 04 检测结果统计与可视化
 - [x] 05 SAM 图像分割
-- [ ] 06 视觉大模型调用
+- [x] 06 视觉大模型调用
 - [ ] 07 双方案对比界面与实验
 - [ ] 08 文档、运行视频与最终验收
 
@@ -31,7 +31,7 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-YOLO 与 MobileSAM 的本地组合流程已经验证。下一步接入视觉大模型，并生成同一格式的物品清单。
+YOLO、MobileSAM 和本地 Qwen3-VL 均已验证。下一步制作双方案对比界面与实验总结。
 
 ## OpenCV 基础练习
 
@@ -74,6 +74,17 @@ python src/sam_segment.py data/input/desk.jpg
 
 程序读取 `data/output/yolo_detections.json` 中的边界框，把它们作为提示交给
 MobileSAM，并在本地生成 `sam_result.jpg` 和 `sam_masks.json`。
+
+## 本地视觉大模型
+
+启动 Ollama 并确认已安装 `qwen3-vl:4b` 后运行：
+
+```powershell
+python src/vlm_inventory.py data/input/desk.jpg
+```
+
+程序只连接本机的 `127.0.0.1:11434`，并将结构化物品清单保存到
+`data/output/vlm_inventory.json`。
 
 ## 隐私约定
 
