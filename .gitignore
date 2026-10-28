@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+
+# Generated files and model weights
+data/output/*
+!data/output/.gitkeep
+*.pt
+*.pth
+*.onnx
+
