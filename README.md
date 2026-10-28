@@ -31,7 +31,32 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-YOLO、MobileSAM、本地 Qwen3-VL 和双方案对比界面均已验证。下一步整理最终文档和运行视频。
+YOLO、MobileSAM、本地 Qwen3-VL 和双方案对比界面均已验证。项目文档和视频讲解稿已经完成，等待录制运行视频并完成最终验收。
+
+## 环境要求
+
+- Windows 10/11
+- Python 3.12
+- Git
+- Ollama 0.12.7 或更高版本
+- 本地模型 `qwen3-vl:4b`
+- 建议使用 NVIDIA GPU；本项目在 8 GB 显存环境完成验证
+
+## 快速启动
+
+先启动 Ollama，然后双击：
+
+```text
+start_app.bat
+```
+
+也可以在已启用虚拟环境的终端运行：
+
+```powershell
+python -m streamlit run app.py
+```
+
+完整项目说明与个人感悟见 [`docs/project-report.md`](docs/project-report.md)，运行视频讲解稿见 [`docs/video-guide.md`](docs/video-guide.md)。
 
 ## OpenCV 基础练习
 
