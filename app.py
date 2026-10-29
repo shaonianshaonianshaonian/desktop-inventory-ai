@@ -77,6 +77,11 @@ st.set_page_config(
 st.title("桌面物品双方案对比")
 st.caption("YOLO + MobileSAM 与本地 Qwen3-VL 处理同一张图片")
 
+st.info(
+    "演示目标：让传统视觉模型和视觉大模型处理同一张桌面图片，"
+    "比较类别识别、定位分割和开放语义理解能力。"
+)
+
 with st.expander("隐私与运行方式", expanded=False):
     st.markdown(
         """
@@ -163,5 +168,45 @@ if result_input and all(path.exists() for path in required_outputs.values()):
 
     st.info(
         "传统方案更适合定位和分割；视觉大模型更适合开放类别识别与语义理解。"
+    )
+
+    st.subheader("本次演示图片的人工评估")
+    st.caption("人工正确答案：瓶子 1、蓝牙耳机 1、鼠标 1、笔 1")
+
+    metric_yolo, metric_vlm, metric_masks = st.columns(3)
+    metric_yolo.metric("YOLO 严格类别正确", "2 / 4")
+    metric_vlm.metric("Qwen3-VL 类别正确", "4 / 4")
+    metric_masks.metric("MobileSAM 生成掩膜", "5")
+
+    st.dataframe(
+        [
+            {
+                "人工物品": "瓶子",
+                "YOLO": "bottle（正确）",
+                "Qwen3-VL": "饮料瓶（正确）",
+            },
+            {
+                "人工物品": "蓝牙耳机",
+                "YOLO": "mouse（误分类）",
+                "Qwen3-VL": "耳机盒（正确）",
+            },
+            {
+                "人工物品": "鼠标",
+                "YOLO": "mouse（正确）",
+                "Qwen3-VL": "鼠标（正确）",
+            },
+            {
+                "人工物品": "笔",
+                "YOLO": "baseball bat（误分类）",
+                "Qwen3-VL": "笔（正确）",
+            },
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.success(
+        "结论：YOLO + MobileSAM 能提供边界框和精确轮廓，但受固定类别限制；"
+        "Qwen3-VL 能正确理解更多开放类别，但不直接提供检测框和掩膜。"
     )
 
