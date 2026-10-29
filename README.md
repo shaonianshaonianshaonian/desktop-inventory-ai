@@ -56,7 +56,7 @@ start_app.bat
 python -m streamlit run app.py
 ```
 
-完整项目说明与个人感悟见 [`docs/project-report.md`](docs/project-report.md)，运行视频讲解稿见 [`docs/video-guide.md`](docs/video-guide.md)。
+完整项目说明与个人感悟见 [`docs/project-report.md`](docs/project-report.md)。
 
 ## OpenCV 基础练习
 
