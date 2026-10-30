@@ -17,13 +17,16 @@ OUTPUT_DIR = ROOT / "data" / "output"
 OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"
 
 
-def run_script(script_name: str, input_path: Path) -> None:
+def run_script(
+    script_name: str, input_path: Path, *extra_arguments: str | Path
+) -> None:
     environment = os.environ.copy()
     environment["PYTHONUTF8"] = "1"
     command = [
         sys.executable,
         str(ROOT / "src" / script_name),
         str(input_path),
+        *(str(argument) for argument in extra_arguments),
     ]
     result = subprocess.run(
         command,
@@ -56,16 +59,34 @@ def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_upload(uploaded_file) -> Path:
+def get_upload_digest(uploaded_file) -> str:
+    return sha256(uploaded_file.getvalue()).hexdigest()[:12]
+
+
+def save_upload(uploaded_file, digest: str) -> Path:
     suffix = Path(uploaded_file.name).suffix.lower()
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         suffix = ".jpg"
     image_bytes = uploaded_file.getvalue()
-    digest = sha256(image_bytes).hexdigest()[:12]
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
     input_path = INPUT_DIR / f"demo_{digest}{suffix}"
     input_path.write_bytes(image_bytes)
     return input_path
+
+
+def get_result_paths(digest: str) -> dict[str, Path]:
+    result_dir = OUTPUT_DIR / digest
+    return {
+        "yolo_image": result_dir / "yolo_result.jpg",
+        "sam_image": result_dir / "sam_result.jpg",
+        "yolo_json": result_dir / "yolo_detections.json",
+        "sam_json": result_dir / "sam_masks.json",
+        "vlm_json": result_dir / "vlm_inventory.json",
+    }
+
+
+def clear_displayed_result() -> None:
+    st.session_state.pop("result", None)
 
 
 st.set_page_config(
@@ -98,35 +119,78 @@ uploaded = st.file_uploader(
     accept_multiple_files=False,
 )
 
-if uploaded is not None:
+current_digest = get_upload_digest(uploaded) if uploaded is not None else None
+if st.session_state.get("selected_digest") != current_digest:
+    st.session_state["selected_digest"] = current_digest
+    clear_displayed_result()
+
+if uploaded is not None and current_digest is not None:
     st.image(uploaded, caption="待分析图片", width="stretch")
 
     if st.button("运行两种方案", type="primary", width="stretch"):
+        clear_displayed_result()
         try:
-            input_path = save_upload(uploaded)
+            input_path = save_upload(uploaded, current_digest)
+            output_paths = get_result_paths(current_digest)
             check_ollama()
             with st.status("正在运行本地模型…", expanded=True) as status:
                 st.write("1/3：YOLO 正在检测物体")
-                run_script("yolo_detect.py", input_path)
+                run_script(
+                    "yolo_detect.py",
+                    input_path,
+                    "--output",
+                    output_paths["yolo_image"],
+                    "--json",
+                    output_paths["yolo_json"],
+                )
                 st.write("2/3：MobileSAM 正在生成分割掩膜")
-                run_script("sam_segment.py", input_path)
+                run_script(
+                    "sam_segment.py",
+                    input_path,
+                    "--detections",
+                    output_paths["yolo_json"],
+                    "--output",
+                    output_paths["sam_image"],
+                    "--json",
+                    output_paths["sam_json"],
+                )
                 st.write("3/3：Qwen3-VL 正在生成物品清单")
-                run_script("vlm_inventory.py", input_path)
+                run_script(
+                    "vlm_inventory.py",
+                    input_path,
+                    "--output",
+                    output_paths["vlm_json"],
+                )
                 status.update(label="分析完成", state="complete", expanded=False)
-            st.session_state["result_input"] = str(input_path)
+            st.session_state["result"] = {
+                "digest": current_digest,
+                "input": str(input_path),
+                "outputs": {
+                    name: str(path) for name, path in output_paths.items()
+                },
+            }
         except Exception as error:
+            clear_displayed_result()
             st.error(str(error))
 
-result_input = st.session_state.get("result_input")
-required_outputs = {
-    "yolo_image": OUTPUT_DIR / "yolo_result.jpg",
-    "sam_image": OUTPUT_DIR / "sam_result.jpg",
-    "yolo_json": OUTPUT_DIR / "yolo_detections.json",
-    "vlm_json": OUTPUT_DIR / "vlm_inventory.json",
-}
+result = st.session_state.get("result")
+if result and result.get("digest") == current_digest:
+    result_input = Path(result["input"])
+    required_outputs = {
+        name: Path(path) for name, path in result["outputs"].items()
+    }
+else:
+    result_input = None
+    required_outputs = {}
 
-if result_input and all(path.exists() for path in required_outputs.values()):
+if (
+    result_input is not None
+    and result_input.exists()
+    and required_outputs
+    and all(path.exists() for path in required_outputs.values())
+):
     yolo_result = read_json(required_outputs["yolo_json"])
+    sam_result = read_json(required_outputs["sam_json"])
     vlm_result = read_json(required_outputs["vlm_json"])
 
     st.divider()
@@ -170,35 +234,41 @@ if result_input and all(path.exists() for path in required_outputs.values()):
         "传统方案更适合定位和分割；视觉大模型更适合开放类别识别与语义理解。"
     )
 
-    st.subheader("本次演示图片的人工评估")
-    st.caption("人工正确答案：瓶子 1、蓝牙耳机 1、鼠标 1、笔 1")
+    st.subheader("当前运行结果统计")
+    st.caption("以下数字根据当前图片的模型输出动态计算，不代表人工标注准确率。")
+
+    yolo_detection_count = len(yolo_result.get("detections", []))
+    vlm_item_count = sum(
+        item.get("count", 0) for item in vlm_result.get("items", [])
+    )
+    sam_mask_count = sam_result.get("mask_count", 0)
 
     metric_yolo, metric_vlm, metric_masks = st.columns(3)
-    metric_yolo.metric("YOLO 严格类别正确", "2 / 4")
-    metric_vlm.metric("Qwen3-VL 类别正确", "4 / 4")
-    metric_masks.metric("MobileSAM 生成掩膜", "5")
+    metric_yolo.metric("YOLO 检测目标", yolo_detection_count)
+    metric_vlm.metric("Qwen3-VL 清单物品", vlm_item_count)
+    metric_masks.metric("MobileSAM 生成掩膜", sam_mask_count)
 
     st.dataframe(
         [
             {
-                "人工物品": "瓶子",
-                "YOLO": "bottle（正确）",
-                "Qwen3-VL": "饮料瓶（正确）",
+                "方案": "YOLO",
+                "当前图片输出": "、".join(
+                    f"{name} × {count}"
+                    for name, count in yolo_result.get("counts", {}).items()
+                )
+                or "未检测到目标",
             },
             {
-                "人工物品": "蓝牙耳机",
-                "YOLO": "mouse（误分类）",
-                "Qwen3-VL": "耳机盒（正确）",
+                "方案": "Qwen3-VL",
+                "当前图片输出": "、".join(
+                    f"{item.get('name', '未知物品')} × {item.get('count', 0)}"
+                    for item in vlm_result.get("items", [])
+                )
+                or "未列出物品",
             },
             {
-                "人工物品": "鼠标",
-                "YOLO": "mouse（正确）",
-                "Qwen3-VL": "鼠标（正确）",
-            },
-            {
-                "人工物品": "笔",
-                "YOLO": "baseball bat（误分类）",
-                "Qwen3-VL": "笔（正确）",
+                "方案": "MobileSAM",
+                "当前图片输出": f"{sam_mask_count} 个掩膜",
             },
         ],
         width="stretch",
@@ -206,7 +276,7 @@ if result_input and all(path.exists() for path in required_outputs.values()):
     )
 
     st.success(
-        "结论：YOLO + MobileSAM 能提供边界框和精确轮廓，但受固定类别限制；"
-        "Qwen3-VL 能正确理解更多开放类别，但不直接提供检测框和掩膜。"
+        "说明：YOLO + MobileSAM 提供边界框和物体轮廓；"
+        "Qwen3-VL 提供开放类别物品清单。若要计算准确率，需要为当前图片另行提供人工标注。"
     )
 
