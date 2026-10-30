@@ -3,13 +3,17 @@
 from argparse import ArgumentParser
 import base64
 import json
+import os
 from pathlib import Path
 
 import cv2
 import requests
 
 
-OLLAMA_CHAT_URL = "http://127.0.0.1:11434/api/chat"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip(
+    "/"
+)
+OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
 
 OUTPUT_SCHEMA = {
     "type": "object",

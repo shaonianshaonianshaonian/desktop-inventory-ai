@@ -106,7 +106,7 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        default="mobile_sam.pt",
+        default=os.getenv("SAM_MODEL", "mobile_sam.pt"),
         help="MobileSAM 或 SAM 模型名称",
     )
     return parser.parse_args()

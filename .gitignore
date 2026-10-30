@@ -18,8 +18,12 @@ data/input/*
 !data/input/.gitkeep
 data/output/*
 !data/output/.gitkeep
+data/*.db
+data/*.db-*
 runs/
 *.pt
 *.pth
 *.onnx
+models/*
+!models/.gitkeep
 

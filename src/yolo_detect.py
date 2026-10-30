@@ -94,7 +94,7 @@ def parse_args():
     )
     parser.add_argument(
         "--model",
-        default="yolo26n.pt",
+        default=os.getenv("YOLO_MODEL", "yolo26n.pt"),
         help="Ultralytics 模型名称或本地模型路径",
     )
     parser.add_argument(

@@ -1,0 +1,64 @@
+x-app-build: &app-build
+  context: .
+  args:
+    PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-m.daocloud.io/docker.io/library/python:3.12-slim-bookworm}
+    PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+
+x-app-environment: &app-environment
+  PYTHONUTF8: "1"
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://10.0.2.2:11434}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-vl:4b}
+  YOLO_MODEL: /models/yolo26n.pt
+  SAM_MODEL: /models/mobile_sam.pt
+  DATABASE_URL: sqlite:////app/data/inventory.db
+
+services:
+  api:
+    build: *app-build
+    image: desktop-inventory-ai:stage3
+    command: >-
+      python -m uvicorn backend.main:app
+      --host 0.0.0.0 --port 8000
+    environment: *app-environment
+    volumes:
+      - ./data:/app/data
+      - ./models:/models:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import requests;
+          requests.get('http://127.0.0.1:8000/api/health', timeout=3).raise_for_status()
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build: *app-build
+    image: desktop-inventory-ai:stage3
+    command: >-
+      python -m streamlit run app.py
+      --server.address 0.0.0.0 --server.port 8501
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+  nginx:
+    image: ${NGINX_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.27-alpine}
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+    ports:
+      - "8080:80"
+    restart: unless-stopped

@@ -1,92 +1,70 @@
-"""桌面物品清点：传统视觉方案与本地视觉大模型对比界面。"""
+"""桌面物品清点：调用 FastAPI 后端的 Streamlit 前端。"""
 
 from hashlib import sha256
-import json
 import os
-from pathlib import Path
-import subprocess
-import sys
+from urllib.parse import urljoin
 
 import requests
 import streamlit as st
 
 
-ROOT = Path(__file__).resolve().parent
-INPUT_DIR = ROOT / "data" / "input"
-OUTPUT_DIR = ROOT / "data" / "output"
-OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"
-
-
-def run_script(
-    script_name: str, input_path: Path, *extra_arguments: str | Path
-) -> None:
-    environment = os.environ.copy()
-    environment["PYTHONUTF8"] = "1"
-    command = [
-        sys.executable,
-        str(ROOT / "src" / script_name),
-        str(input_path),
-        *(str(argument) for argument in extra_arguments),
-    ]
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    if result.returncode != 0:
-        details = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"{script_name} 运行失败：\n{details}")
-
-
-def check_ollama() -> None:
-    try:
-        response = requests.get(OLLAMA_TAGS_URL, timeout=5)
-        response.raise_for_status()
-    except requests.RequestException as error:
-        raise RuntimeError("无法连接本机 Ollama，请先启动 Ollama") from error
-
-    models = {item["name"] for item in response.json().get("models", [])}
-    if "qwen3-vl:4b" not in models:
-        raise RuntimeError("本机没有 qwen3-vl:4b，请先运行 ollama pull qwen3-vl:4b")
-
-
-def read_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+ANALYSIS_URL = f"{API_BASE_URL}/api/analyses"
 
 
 def get_upload_digest(uploaded_file) -> str:
-    return sha256(uploaded_file.getvalue()).hexdigest()[:12]
-
-
-def save_upload(uploaded_file, digest: str) -> Path:
-    suffix = Path(uploaded_file.name).suffix.lower()
-    if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
-        suffix = ".jpg"
-    image_bytes = uploaded_file.getvalue()
-    INPUT_DIR.mkdir(parents=True, exist_ok=True)
-    input_path = INPUT_DIR / f"demo_{digest}{suffix}"
-    input_path.write_bytes(image_bytes)
-    return input_path
-
-
-def get_result_paths(digest: str) -> dict[str, Path]:
-    result_dir = OUTPUT_DIR / digest
-    return {
-        "yolo_image": result_dir / "yolo_result.jpg",
-        "sam_image": result_dir / "sam_result.jpg",
-        "yolo_json": result_dir / "yolo_detections.json",
-        "sam_json": result_dir / "sam_masks.json",
-        "vlm_json": result_dir / "vlm_inventory.json",
-    }
+    return sha256(uploaded_file.getvalue()).hexdigest()
 
 
 def clear_displayed_result() -> None:
     st.session_state.pop("result", None)
+
+
+def extract_error(response: requests.Response) -> str:
+    try:
+        detail = response.json().get("detail", response.text)
+    except ValueError:
+        return response.text or f"HTTP {response.status_code}"
+    if isinstance(detail, dict):
+        return detail.get("message", str(detail))
+    return str(detail)
+
+
+def request_analysis(uploaded_file) -> dict:
+    files = {
+        "file": (
+            uploaded_file.name,
+            uploaded_file.getvalue(),
+            uploaded_file.type or "application/octet-stream",
+        )
+    }
+    try:
+        response = requests.post(ANALYSIS_URL, files=files, timeout=900)
+    except requests.ConnectionError as error:
+        raise RuntimeError(
+            f"无法连接后端 API（{API_BASE_URL}），请先启动完整 Web 项目"
+        ) from error
+    except requests.Timeout as error:
+        raise RuntimeError("后端分析超时，请检查模型服务状态") from error
+    if not response.ok:
+        raise RuntimeError(extract_error(response))
+    return response.json()
+
+
+def fetch_artifact(relative_path: str) -> bytes:
+    url = urljoin(f"{API_BASE_URL}/", relative_path.lstrip("/"))
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    return response.content
+
+
+def load_history() -> list[dict]:
+    try:
+        response = requests.get(ANALYSIS_URL, params={"limit": 10}, timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException:
+        return []
 
 
 st.set_page_config(
@@ -96,20 +74,20 @@ st.set_page_config(
 )
 
 st.title("桌面物品双方案对比")
-st.caption("YOLO + MobileSAM 与本地 Qwen3-VL 处理同一张图片")
+st.caption("Streamlit 前端 + FastAPI 后端 + SQLAlchemy 记录")
 
 st.info(
-    "演示目标：让传统视觉模型和视觉大模型处理同一张桌面图片，"
-    "比较类别识别、定位分割和开放语义理解能力。"
+    "上传同一张桌面图片，由 YOLO + MobileSAM 与本地 Qwen3-VL 分别处理，"
+    "比较目标定位、图像分割和开放语义理解能力。"
 )
 
-with st.expander("隐私与运行方式", expanded=False):
+with st.expander("系统架构与隐私", expanded=False):
     st.markdown(
-        """
-        - 图片仅保存在本机 `data/input`，不会上传到云端。
-        - YOLO、MobileSAM 和 Qwen3-VL 均在本机运行。
-        - Qwen3-VL 只通过 `127.0.0.1:11434` 连接本机 Ollama。
-        - 输入图片和模型输出均被 Git 忽略。
+        f"""
+        - 当前前端通过 `{API_BASE_URL}` 调用 FastAPI。
+        - FastAPI 统一调用 YOLO、MobileSAM 和 Qwen3-VL，并使用 SQLAlchemy 保存记录。
+        - Qwen3-VL 由本机 Ollama 运行，图片不会发送到云端模型。
+        - 输入图片、模型输出和 SQLite 数据库均被 Git 忽略。
         """
     )
 
@@ -127,156 +105,105 @@ if st.session_state.get("selected_digest") != current_digest:
 if uploaded is not None and current_digest is not None:
     st.image(uploaded, caption="待分析图片", width="stretch")
 
-    if st.button("运行两种方案", type="primary", width="stretch"):
+    if st.button("调用后端运行两种方案", type="primary", width="stretch"):
         clear_displayed_result()
         try:
-            input_path = save_upload(uploaded, current_digest)
-            output_paths = get_result_paths(current_digest)
-            check_ollama()
-            with st.status("正在运行本地模型…", expanded=True) as status:
-                st.write("1/3：YOLO 正在检测物体")
-                run_script(
-                    "yolo_detect.py",
-                    input_path,
-                    "--output",
-                    output_paths["yolo_image"],
-                    "--json",
-                    output_paths["yolo_json"],
-                )
-                st.write("2/3：MobileSAM 正在生成分割掩膜")
-                run_script(
-                    "sam_segment.py",
-                    input_path,
-                    "--detections",
-                    output_paths["yolo_json"],
-                    "--output",
-                    output_paths["sam_image"],
-                    "--json",
-                    output_paths["sam_json"],
-                )
-                st.write("3/3：Qwen3-VL 正在生成物品清单")
-                run_script(
-                    "vlm_inventory.py",
-                    input_path,
-                    "--output",
-                    output_paths["vlm_json"],
-                )
+            with st.status("后端正在运行本地模型…", expanded=True) as status:
+                st.write("FastAPI 已接收图片，正在执行 YOLO、MobileSAM 和 Qwen3-VL")
+                result = request_analysis(uploaded)
                 status.update(label="分析完成", state="complete", expanded=False)
-            st.session_state["result"] = {
-                "digest": current_digest,
-                "input": str(input_path),
-                "outputs": {
-                    name: str(path) for name, path in output_paths.items()
-                },
-            }
+            if result.get("digest") != current_digest:
+                raise RuntimeError("后端返回结果与当前图片不一致")
+            st.session_state["result"] = result
         except Exception as error:
             clear_displayed_result()
             st.error(str(error))
 
 result = st.session_state.get("result")
 if result and result.get("digest") == current_digest:
-    result_input = Path(result["input"])
-    required_outputs = {
-        name: Path(path) for name, path in result["outputs"].items()
-    }
-else:
-    result_input = None
-    required_outputs = {}
+    yolo_result = result.get("yolo", {})
+    vlm_result = result.get("vlm", {})
+    artifacts = result.get("artifacts", {})
 
-if (
-    result_input is not None
-    and result_input.exists()
-    and required_outputs
-    and all(path.exists() for path in required_outputs.values())
-):
-    yolo_result = read_json(required_outputs["yolo_json"])
-    sam_result = read_json(required_outputs["sam_json"])
-    vlm_result = read_json(required_outputs["vlm_json"])
+    try:
+        yolo_image = fetch_artifact(artifacts["yolo_image"])
+        sam_image = fetch_artifact(artifacts["sam_image"])
+    except (KeyError, requests.RequestException) as error:
+        clear_displayed_result()
+        st.error(f"无法读取本次分析图片：{error}")
+    else:
+        st.divider()
+        st.subheader("同一输入的处理结果")
+        original_column, yolo_column, sam_column = st.columns(3)
+        with original_column:
+            st.markdown("#### 原始图片")
+            st.image(uploaded, width="stretch")
+        with yolo_column:
+            st.markdown("#### YOLO 目标检测")
+            st.image(yolo_image, width="stretch")
+        with sam_column:
+            st.markdown("#### MobileSAM 分割")
+            st.image(sam_image, width="stretch")
 
-    st.divider()
-    st.subheader("同一输入的处理结果")
-    original_column, yolo_column, sam_column = st.columns(3)
-    with original_column:
-        st.markdown("#### 原始图片")
-        st.image(result_input, width="stretch")
-    with yolo_column:
-        st.markdown("#### YOLO 目标检测")
-        st.image(required_outputs["yolo_image"], width="stretch")
-    with sam_column:
-        st.markdown("#### MobileSAM 分割")
-        st.image(required_outputs["sam_image"], width="stretch")
+        traditional_column, vlm_column = st.columns(2, gap="large")
+        with traditional_column:
+            st.markdown("### 传统视觉方案")
+            yolo_rows = [
+                {"类别": name, "数量": count}
+                for name, count in yolo_result.get("counts", {}).items()
+            ]
+            st.dataframe(yolo_rows, width="stretch", hide_index=True)
+            st.caption("优势：提供边界框、置信度和像素掩膜。")
 
-    traditional_column, vlm_column = st.columns(2, gap="large")
-    with traditional_column:
-        st.markdown("### 传统视觉方案")
-        yolo_rows = [
-            {"类别": name, "数量": count}
-            for name, count in yolo_result.get("counts", {}).items()
-        ]
-        st.dataframe(yolo_rows, width="stretch", hide_index=True)
-        st.caption("优势：能提供边界框、置信度和像素掩膜。")
+        with vlm_column:
+            st.markdown("### 本地视觉大模型方案")
+            vlm_rows = [
+                {
+                    "物品": item.get("name"),
+                    "数量": item.get("count"),
+                    "置信度": item.get("confidence"),
+                    "判断依据": item.get("reason"),
+                }
+                for item in vlm_result.get("items", [])
+            ]
+            st.dataframe(vlm_rows, width="stretch", hide_index=True)
+            st.caption("优势：理解开放类别，并生成自然语言物品清单。")
 
-    with vlm_column:
-        st.markdown("### 本地视觉大模型方案")
-        vlm_rows = [
-            {
-                "物品": item["name"],
-                "数量": item["count"],
-                "置信度": item["confidence"],
-                "判断依据": item["reason"],
-            }
-            for item in vlm_result.get("items", [])
-        ]
-        st.dataframe(vlm_rows, width="stretch", hide_index=True)
-        st.caption("优势：能理解开放类别，并生成自然语言物品清单。")
+        st.subheader("当前运行结果统计")
+        st.caption("数字来自当前分析记录，不代表人工标注准确率。")
+        summary = result.get("summary", {})
+        metric_yolo, metric_vlm, metric_masks = st.columns(3)
+        metric_yolo.metric(
+            "YOLO 检测目标", summary.get("yolo_detection_count", 0)
+        )
+        metric_vlm.metric("Qwen3-VL 清单物品", summary.get("vlm_item_count", 0))
+        metric_masks.metric("MobileSAM 生成掩膜", summary.get("sam_mask_count", 0))
 
-    st.info(
-        "传统方案更适合定位和分割；视觉大模型更适合开放类别识别与语义理解。"
-    )
+        st.success(
+            f"分析记录 #{result.get('id')} 已保存到 SQLAlchemy 数据库。"
+            "三种输出均属于当前上传图片。"
+        )
 
-    st.subheader("当前运行结果统计")
-    st.caption("以下数字根据当前图片的模型输出动态计算，不代表人工标注准确率。")
-
-    yolo_detection_count = len(yolo_result.get("detections", []))
-    vlm_item_count = sum(
-        item.get("count", 0) for item in vlm_result.get("items", [])
-    )
-    sam_mask_count = sam_result.get("mask_count", 0)
-
-    metric_yolo, metric_vlm, metric_masks = st.columns(3)
-    metric_yolo.metric("YOLO 检测目标", yolo_detection_count)
-    metric_vlm.metric("Qwen3-VL 清单物品", vlm_item_count)
-    metric_masks.metric("MobileSAM 生成掩膜", sam_mask_count)
-
-    st.dataframe(
-        [
-            {
-                "方案": "YOLO",
-                "当前图片输出": "、".join(
-                    f"{name} × {count}"
-                    for name, count in yolo_result.get("counts", {}).items()
-                )
-                or "未检测到目标",
-            },
-            {
-                "方案": "Qwen3-VL",
-                "当前图片输出": "、".join(
-                    f"{item.get('name', '未知物品')} × {item.get('count', 0)}"
-                    for item in vlm_result.get("items", [])
-                )
-                or "未列出物品",
-            },
-            {
-                "方案": "MobileSAM",
-                "当前图片输出": f"{sam_mask_count} 个掩膜",
-            },
-        ],
-        width="stretch",
-        hide_index=True,
-    )
-
-    st.success(
-        "说明：YOLO + MobileSAM 提供边界框和物体轮廓；"
-        "Qwen3-VL 提供开放类别物品清单。若要计算准确率，需要为当前图片另行提供人工标注。"
-    )
-
+with st.expander("最近分析记录", expanded=False):
+    history = load_history()
+    if history:
+        st.dataframe(
+            [
+                {
+                    "编号": item.get("id"),
+                    "文件名": item.get("filename"),
+                    "状态": item.get("status"),
+                    "YOLO目标": item.get("summary", {}).get(
+                        "yolo_detection_count"
+                    ),
+                    "SAM掩膜": item.get("summary", {}).get("sam_mask_count"),
+                    "VLM物品": item.get("summary", {}).get("vlm_item_count"),
+                    "创建时间": item.get("created_at"),
+                }
+                for item in history
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.caption("暂无记录，或后端 API 当前不可访问。")
