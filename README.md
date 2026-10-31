@@ -22,7 +22,7 @@ Streamlit 前端、Docker Compose 与 nginx 反向代理，形成可部署的完
 - [x] 10 SQLAlchemy 分析记录
 - [x] 11 Streamlit 前后端联通
 - [x] 12 Docker Compose 与 nginx 配置
-- [ ] 13 Linux 容器部署与最终验收
+- [x] 13 Linux 容器部署与最终验收
 
 ## 目录
 
@@ -44,8 +44,9 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-二阶段模型功能已完成；三阶段 FastAPI、SQLAlchemy、Streamlit 和 Docker 配置已加入，
-正在进行 Linux 容器部署与模型网络联通。
+二阶段模型功能和三阶段 Web 部署均已完成。项目已经在 VirtualBox 的 Ubuntu
+环境中通过 Docker Compose 启动，并完成 nginx、Streamlit、FastAPI、SQLAlchemy、
+YOLO、MobileSAM 与 Windows 本机 Ollama 的完整联调。
 
 ## 环境要求
 
@@ -156,6 +157,9 @@ nginx :8080 -> Streamlit :8501 -> FastAPI :8000
                                       +-> Ollama Qwen3-VL
                                       +-> SQLite
 ```
+
+本项目已在 Ubuntu 26.04.1 LTS 中完成实际验证：三个容器均正常运行，健康检查返回
+`api: ok` 和 `ollama: ok`，网页可以上传图片并展示属于同一次分析的三种输出及动态统计。
 
 ## 隐私约定
 
