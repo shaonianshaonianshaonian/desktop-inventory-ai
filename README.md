@@ -5,8 +5,9 @@
 1. YOLO（可选接入 SAM）检测、定位并统计桌面物品。
 2. 视觉大模型识别图片内容并生成结构化物品清单。
 
-第三阶段在原有模型对比基础上增加 FastAPI 后端、SQLAlchemy 运行记录、
-Streamlit 前端、Docker Compose 与 nginx 反向代理，形成可部署的完整 Web 应用。
+第三阶段在原有模型对比基础上增加 FastAPI 后端、JWT 登录、SQLAlchemy 运行记录、
+Redis/Celery 异步任务、Streamlit 前端、Docker Compose 与 nginx 反向代理，形成
+可部署的完整 Web 应用。
 
 ## 项目进度
 
@@ -23,12 +24,14 @@ Streamlit 前端、Docker Compose 与 nginx 反向代理，形成可部署的完
 - [x] 11 Streamlit 前后端联通
 - [x] 12 Docker Compose 与 nginx 配置
 - [x] 13 Linux 容器部署与最终验收
+- [x] 14 异步 Worker、任务状态、超时与取消
+- [x] 15 JWT 登录与用户数据权限
 
 ## 目录
 
 ```text
 desktop-inventory-ai/
-├─ backend/          # FastAPI、SQLAlchemy 和模型流水线
+├─ backend/          # FastAPI、JWT、Celery、SQLAlchemy 和模型流水线
 ├─ data/
 │  ├─ input/       # 测试图片
 │  └─ output/      # 模型输出
@@ -44,9 +47,9 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-二阶段模型功能和三阶段 Web 部署均已完成。项目已经在 VirtualBox 的 Ubuntu
-环境中通过 Docker Compose 启动，并完成 nginx、Streamlit、FastAPI、SQLAlchemy、
-YOLO、MobileSAM 与 Windows 本机 Ollama 的完整联调。
+二阶段模型功能和三阶段 Web 部署均已完成。原部署已在 VirtualBox Ubuntu 中完成
+联调；Redis/Celery、JWT 与权限升级的代码和自动化测试已完成，需要在 Ubuntu 中
+重新构建镜像并执行五容器验收。
 
 ## 环境要求
 
@@ -55,13 +58,15 @@ YOLO、MobileSAM 与 Windows 本机 Ollama 的完整联调。
 - Python 3.12
 - Git
 - Docker Engine 与 Docker Compose
+- Redis 7（Docker Compose 会自动启动）
 - Ollama 0.12.7 或更高版本
 - 本地模型 `qwen3-vl:4b`
 - 建议使用 NVIDIA GPU；本项目在 8 GB 显存环境完成验证
 
 ## 快速启动
 
-先启动 Ollama，然后双击：
+推荐使用下方 Docker Compose 方式运行完整系统。本地 Windows 启动器还要求
+`127.0.0.1:6379` 已有 Redis；满足后先启动 Ollama，再双击：
 
 ```text
 start_app.bat
@@ -142,24 +147,36 @@ python src/vlm_inventory.py data/input/desk.jpg
 python src/run_web.py
 ```
 
-浏览器会打开本地地址 `http://127.0.0.1:8501`。选择图片后点击“运行两种方案”，
-前端会把图片提交到 FastAPI，后端依次运行 YOLO、MobileSAM 和 Qwen3-VL，
-再将结果与 SQLAlchemy 分析记录返回页面。
+浏览器会打开本地地址 `http://127.0.0.1:8501`。选择图片后点击“提交异步分析任务”，
+前端会把图片提交到 FastAPI，FastAPI 将任务写入 Redis，Celery Worker 独立运行
+YOLO、MobileSAM 和 Qwen3-VL。页面轮询任务状态，并支持取消和超时状态。
+
+首次使用先注册账号。JWT 用于登录；历史记录和三类图片接口都会验证记录所有者。
+YOLO 没有检测结果时系统记录 0、跳过 MobileSAM，并继续执行 Qwen3-VL。
+视觉大模型结果必须通过严格结构校验，异常数量和失败回复不会计为成功。
 
 ## Docker 部署
 
 Linux 部署步骤见 [`docs/deployment.md`](docs/deployment.md)。容器架构包含：
 
 ```text
-nginx :8080 -> Streamlit :8501 -> FastAPI :8000
-                                      |
-                                      +-> YOLO / MobileSAM
-                                      +-> Ollama Qwen3-VL
-                                      +-> SQLite
+nginx :8080 -> Streamlit :8501 -> FastAPI :8000 -> Redis
+                                      |              |
+                                      |              v
+                                      +--------> Celery Worker
+                                                   |
+                                                   +-> YOLO / MobileSAM
+                                                   +-> Ollama Qwen3-VL
+                                                   +-> SQLite
 ```
 
-本项目已在 Ubuntu 26.04.1 LTS 中完成实际验证：三个容器均正常运行，健康检查返回
-`api: ok` 和 `ollama: ok`，网页可以上传图片并展示属于同一次分析的三种输出及动态统计。
+复制环境变量并修改 JWT 密钥后启动：
+
+```bash
+cp .env.example .env
+# 编辑 .env，将 JWT_SECRET 换成至少 32 位随机字符串
+docker compose up -d --build
+```
 
 ## 隐私约定
 

@@ -73,14 +73,27 @@ SQLite，页面可以查看最近分析记录。
 
 ### 4.6 Linux 与 Docker 部署
 
-项目在 VirtualBox Ubuntu 26.04.1 LTS 中完成实际部署。Docker Compose 统一管理
-FastAPI、Streamlit 和 nginx 三个服务，模型权重通过只读目录挂载，不写入镜像。
-nginx 提供统一的 `8080` 访问入口，FastAPI 健康检查同时验证 Ollama 和
-`qwen3-vl:4b` 的可用状态。
+项目在 VirtualBox Ubuntu 26.04.1 LTS 中完成基础版本部署。升级后的 Docker
+Compose 统一管理 FastAPI、Streamlit、nginx、Redis 和 Celery Worker 五个服务，
+模型权重通过只读目录挂载，不写入镜像。nginx 提供统一的 `8080` 访问入口，
+FastAPI 健康检查同时验证消息队列、Ollama 和 `qwen3-vl:4b` 的可用状态。
 
 Windows 上的 Ollama 负责使用 GPU 运行视觉大模型，Ubuntu 虚拟机通过 VirtualBox
 NAT 地址 `10.0.2.2:11434` 访问它。Windows 浏览器通过仅绑定到
 `127.0.0.1:8080` 的端口转发访问容器页面，整个处理过程仍限定在本机环境中。
+
+### 4.7 异步任务、登录与权限
+
+耗时推理不再由 FastAPI 请求进程直接执行。API 保存上传记录后立即返回 HTTP 202，
+再通过 Redis 把任务交给独立 Celery Worker。页面使用分析编号查询
+`queued`、`running`、`succeeded`、`failed`、`timed_out`、`cancelling` 和
+`cancelled` 状态。任务设置总时限，取消时 Worker 会终止当前模型子进程并清理
+不完整输出。
+
+系统增加注册、登录和带过期时间的 JWT。密码使用 PBKDF2-SHA256 加盐散列，
+分析历史和图片接口同时校验 JWT、分析编号与所有者编号，其他用户无法读取记录或
+通过图片地址绕过权限。YOLO 没检测到目标时记录 0 并跳过 MobileSAM，视觉大模型
+仍继续运行；Qwen3-VL 输出还要通过严格结构校验，异常数量或失败回复不会被记为成功。
 
 ## 五、实验设计
 
@@ -156,6 +169,10 @@ Git 的持续提交记录了项目从环境准备、OpenCV、YOLO、SAM、视觉
 为了让网页、后端、数据库和模型协同工作，我需要处理容器网络、模型权重挂载、
 反向代理、健康检查和浏览器端口转发。排查过程中，我学会先分别验证容器状态、
 HTTP 接口和模型连接，再检查完整页面，而不是把所有问题都归因于模型本身。
+
+后续完善异步队列和用户权限时，我进一步认识到，耗时模型不能长期占用 Web 请求，
+“任务已接收”“正在运行”“失败或超时”也必须成为明确的数据状态。图片隐私不仅是
+不提交 Git，还包括接口层面的所有者校验，防止其他登录用户通过编号访问历史结果。
 
 ## 十、后续改进
 

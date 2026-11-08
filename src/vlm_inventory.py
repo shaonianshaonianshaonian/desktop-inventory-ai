@@ -5,9 +5,18 @@ import base64
 import json
 import os
 from pathlib import Path
+import sys
 
 import cv2
+from pydantic import ValidationError
 import requests
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.schemas import InventoryResult
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip(
@@ -25,7 +34,11 @@ OUTPUT_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "count": {"type": "integer", "minimum": 1},
+                    "count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                    },
                     "confidence": {
                         "type": "string",
                         "enum": ["high", "medium", "low"],
@@ -117,9 +130,11 @@ def request_inventory(
     except json.JSONDecodeError as error:
         raise RuntimeError(f"模型返回的内容不是有效 JSON：{content}") from error
 
-    if not isinstance(inventory.get("items"), list):
-        raise RuntimeError("模型结果缺少 items 列表")
-    return inventory
+    try:
+        validated = InventoryResult.model_validate(inventory)
+    except ValidationError as error:
+        raise RuntimeError(f"模型返回结果未通过结构校验：{error}") from error
+    return validated.model_dump()
 
 
 def main() -> None:

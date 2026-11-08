@@ -20,6 +20,7 @@ data/output/*
 !data/output/.gitkeep
 data/*.db
 data/*.db-*
+data/*.secret
 runs/
 *.pt
 *.pth

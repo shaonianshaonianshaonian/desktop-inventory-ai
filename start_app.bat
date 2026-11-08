@@ -7,7 +7,7 @@ if not exist ".venv\Scripts\python.exe" (
     pause
     exit /b 1
 )
-echo Starting FastAPI backend and Streamlit frontend...
-echo Press Ctrl+C in this window to stop both services.
+echo Starting FastAPI, Celery worker and Streamlit...
+echo Redis must already be running. Press Ctrl+C to stop local services.
 ".venv\Scripts\python.exe" src\run_web.py
 endlocal

@@ -42,7 +42,23 @@ def main() -> None:
     environment.setdefault("API_BASE_URL", "http://127.0.0.1:8000")
     api_process = None
     web_process = None
+    worker_process = None
     try:
+        worker_process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "celery",
+                "-A",
+                "backend.celery_app:celery_app",
+                "worker",
+                "--loglevel=INFO",
+                "--pool=solo",
+                "--concurrency=1",
+            ],
+            cwd=ROOT,
+            env=environment,
+        )
         api_process = subprocess.Popen(
             [
                 sys.executable,
@@ -59,6 +75,7 @@ def main() -> None:
         )
         wait_for_api(api_process)
         print("FastAPI backend: http://127.0.0.1:8000/docs", flush=True)
+        print("Celery worker started; Redis must be available.", flush=True)
         web_process = subprocess.Popen(
             [
                 sys.executable,
@@ -76,6 +93,7 @@ def main() -> None:
     finally:
         stop_process(web_process)
         stop_process(api_process)
+        stop_process(worker_process)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,11 @@ x-app-environment: &app-environment
   YOLO_MODEL: /models/yolo26n.pt
   SAM_MODEL: /models/mobile_sam.pt
   DATABASE_URL: sqlite:////app/data/inventory.db
+  JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET in .env}
+  JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-120}
+  ANALYSIS_TIMEOUT_SECONDS: ${ANALYSIS_TIMEOUT_SECONDS:-900}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
 
 services:
   api:
@@ -20,6 +25,9 @@ services:
       python -m uvicorn backend.main:app
       --host 0.0.0.0 --port 8000
     environment: *app-environment
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./models:/models:ro
@@ -37,6 +45,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  worker:
+    build: *app-build
+    image: desktop-inventory-ai:stage3
+    command: >-
+      celery -A backend.celery_app:celery_app worker
+      --loglevel=INFO --concurrency=1
+    environment: *app-environment
+    volumes:
+      - ./data:/app/data
+      - ./models:/models:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: ${REDIS_IMAGE:-m.daocloud.io/docker.io/library/redis:7.4-alpine}
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   web:
     build: *app-build
@@ -62,3 +97,6 @@ services:
     ports:
       - "8080:80"
     restart: unless-stopped
+
+volumes:
+  redis-data:
