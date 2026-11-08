@@ -122,15 +122,14 @@ docker compose down
 
 ## 版本验证记录
 
-同步推理版本曾在 VirtualBox Ubuntu 26.04.1 LTS 中完成部署验证：
+项目已在 VirtualBox Ubuntu 26.04.1 LTS 中完成部署验证：
 
-- `api` 容器状态为 `healthy`，`web` 与 `nginx` 容器正常运行；
-- `/api/health` 返回 `api: ok`、`ollama: ok` 和 `qwen3-vl:4b`；
+- `api` 与 `redis` 状态为 `healthy`，`worker`、`web` 与 `nginx` 正常运行；
+- `/api/health` 返回 `api: ok`、`queue: ok`、`ollama: ok` 和 `qwen3-vl:4b`；
 - nginx 的 `8080` 入口返回 HTTP 200；
 - Windows 浏览器通过 NAT 端口转发正常打开页面；
 - 图片上传后，YOLO、MobileSAM、Qwen3-VL 均完成处理；
 - 当前图片的检测数、掩膜数和清单物品数由后端结果动态计算；
-- 成功记录写入 SQLite，并可在“最近分析记录”中查看。
-
-本次异步与权限升级已通过自动化测试。升级后需要重新执行
-`docker compose up -d --build`，并按上方八项验收检查验证五个容器。
+- 登录、异步任务提交与本人历史记录访问正常；
+- 成功记录写入 SQLite，并可在“最近分析记录”中查看；
+- 14 项自动化测试覆盖零检测、输出校验、超时、中断、JWT 和跨用户权限。

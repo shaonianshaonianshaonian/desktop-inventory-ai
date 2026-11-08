@@ -73,10 +73,10 @@ SQLite，页面可以查看最近分析记录。
 
 ### 4.6 Linux 与 Docker 部署
 
-项目在 VirtualBox Ubuntu 26.04.1 LTS 中完成基础版本部署。升级后的 Docker
-Compose 统一管理 FastAPI、Streamlit、nginx、Redis 和 Celery Worker 五个服务，
-模型权重通过只读目录挂载，不写入镜像。nginx 提供统一的 `8080` 访问入口，
-FastAPI 健康检查同时验证消息队列、Ollama 和 `qwen3-vl:4b` 的可用状态。
+项目在 VirtualBox Ubuntu 26.04.1 LTS 中完成部署。Docker Compose 统一管理
+FastAPI、Streamlit、nginx、Redis 和 Celery Worker 五个服务，模型权重通过只读
+目录挂载，不写入镜像。nginx 提供统一的 `8080` 访问入口，实际健康检查返回
+API、消息队列、Ollama 和 `qwen3-vl:4b` 均正常。
 
 Windows 上的 Ollama 负责使用 GPU 运行视觉大模型，Ubuntu 虚拟机通过 VirtualBox
 NAT 地址 `10.0.2.2:11434` 访问它。Windows 浏览器通过仅绑定到

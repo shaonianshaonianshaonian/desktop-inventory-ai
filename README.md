@@ -47,9 +47,9 @@ desktop-inventory-ai/
 
 ## 当前阶段
 
-二阶段模型功能和三阶段 Web 部署均已完成。原部署已在 VirtualBox Ubuntu 中完成
-联调；Redis/Celery、JWT 与权限升级的代码和自动化测试已完成，需要在 Ubuntu 中
-重新构建镜像并执行五容器验收。
+二阶段模型功能和三阶段 Web 部署均已完成。项目已在 VirtualBox Ubuntu 中重新构建，
+完成 nginx、Streamlit、FastAPI、Redis、Celery Worker、SQLAlchemy 与本机
+Ollama 的五容器联调和登录验收。
 
 ## 环境要求
 
@@ -177,6 +177,9 @@ cp .env.example .env
 # 编辑 .env，将 JWT_SECRET 换成至少 32 位随机字符串
 docker compose up -d --build
 ```
+
+实际验收中五个服务均正常运行，健康检查返回 `api: ok`、`queue: ok` 和
+`ollama: ok`。
 
 ## 隐私约定
 
